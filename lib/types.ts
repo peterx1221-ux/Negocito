@@ -3,6 +3,7 @@ export type Product = {
   user_id: string;
   name: string;
   category: string | null;
+  photo_path: string | null;
   cost: number;
   price: number;
   stock: number;
