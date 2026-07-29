@@ -55,6 +55,10 @@ export default async function ResumenPage() {
         </Link>
       </div>
 
+      <Link href="/estadisticas" className="btn btn-ghost btn-block" style={{ marginBottom: 12 }}>
+        📊 Ver estadísticas
+      </Link>
+
       {bajoStock.map((p) => (
         <div className="alert-card" key={p.id}>
           ⚠️ Queda{p.stock === 1 ? "" : "n"} {p.stock} unidad{p.stock === 1 ? "" : "es"} de &ldquo;{p.name}&rdquo; — stock bajo
