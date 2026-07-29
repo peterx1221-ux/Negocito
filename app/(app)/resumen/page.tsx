@@ -77,7 +77,9 @@ export default async function ResumenPage() {
                 <div className="icon-circle">📦</div>
                 <div>
                   <div className="p-name">{p.name}</div>
-                  <div className="p-sub">Stock: {p.stock}</div>
+                  <div className="p-sub">
+                    {p.category ? `${p.category} · ` : ""}Stock: {p.stock}
+                  </div>
                 </div>
               </div>
               <div className="p-price">{money(p.price)}</div>
