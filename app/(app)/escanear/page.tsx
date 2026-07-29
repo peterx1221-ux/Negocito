@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { calcSuggestedPrice, tierLabel, money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
-import { SETTINGS_PUBLIC_COLUMNS, defaultSettingsPublic, type SettingsPublic, type ReviewItem, type Product } from "@/lib/types";
+import { SETTINGS_PUBLIC_COLUMNS, defaultSettingsPublic, CATEGORY_SUGGESTIONS, type SettingsPublic, type ReviewItem, type Product } from "@/lib/types";
 
 type Step = "method" | "photos" | "pdf" | "loading" | "review" | "gastos" | "precios" | "sin-clave";
 
@@ -23,7 +23,7 @@ export default function EscanearPage() {
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [tripExpense, setTripExpense] = useState("0");
   const [priceResults, setPriceResults] = useState
-    { name: string; cost: number; qty: number; costoRealUnit: number; precioFinal: number }[]
+    { name: string; cost: number; qty: number; category: string; costoRealUnit: number; precioFinal: number }[]
   >([]);
   const [saving, setSaving] = useState(false);
 
@@ -109,7 +109,7 @@ export default function EscanearPage() {
       const share = (it.cost * it.qty) / totalCosto * trip;
       const costoRealUnit = it.cost + share / it.qty;
       const sugerido = calcSuggestedPrice(costoRealUnit, settings);
-      return { name: it.name, cost: it.cost, qty: it.qty, costoRealUnit, precioFinal: sugerido };
+      return { name: it.name, cost: it.cost, qty: it.qty, category: it.category, costoRealUnit, precioFinal: sugerido };
     });
     setPriceResults(results);
     setStep("precios");
@@ -139,6 +139,7 @@ export default function EscanearPage() {
         await supabase.from("products").insert({
           user_id: user.id,
           name: r.name,
+          category: r.category,
           cost: r.cost,
           price: r.precioFinal,
           stock: r.qty,
@@ -275,8 +276,20 @@ export default function EscanearPage() {
             <input type="number" value={it.cost} onChange={(e) => updateReviewItem(i, "cost", parseFloat(e.target.value) || 0)} />
             <label className="field-label">Cantidad</label>
             <input type="number" min={1} value={it.qty} onChange={(e) => updateReviewItem(i, "qty", parseInt(e.target.value) || 1)} />
+            <label className="field-label">Categoría</label>
+            <input
+              type="text"
+              list="categorias-sugeridas"
+              value={it.category}
+              onChange={(e) => updateReviewItem(i, "category", e.target.value)}
+            />
           </div>
         ))}
+        <datalist id="categorias-sugeridas">
+          {CATEGORY_SUGGESTIONS.map((c) => (
+            <option value={c} key={c} />
+          ))}
+        </datalist>
         <button className="btn btn-primary btn-block" onClick={() => setStep("gastos")}>
           Continuar
         </button>
@@ -305,6 +318,7 @@ export default function EscanearPage() {
       {priceResults.map((r, i) => (
         <div className="price-tier-card" key={i}>
           <div className="name">{r.name}</div>
+          <div className="tierlabel" style={{ marginRight: 6 }}>{r.category}</div>
           <div className="breakdown">Costo real: {money(r.costoRealUnit)} (costo + gasto del viaje repartido)</div>
           <div className="tierlabel">{settings ? tierLabel(r.costoRealUnit, settings) : ""}</div>
           <input
