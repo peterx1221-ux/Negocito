@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { calcSuggestedPrice, tierLabel, money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
 import { SETTINGS_PUBLIC_COLUMNS, defaultSettingsPublic, CATEGORY_SUGGESTIONS, type SettingsPublic, type ReviewItem, type Product } from "@/lib/types";
+import { compressImage } from "@/lib/image";
 
 type Step = "method" | "photos" | "pdf" | "loading" | "review" | "gastos" | "precios" | "sin-clave";
 
@@ -44,15 +45,29 @@ export default function EscanearPage() {
   async function filesToBase64(files: FileList): Promise<PendingPhoto[]> {
     const results: PendingPhoto[] = [];
     for (const file of Array.from(files)) {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-        reader.readAsDataURL(file);
-      });
-      results.push({ base64, mediaType: file.type, previewUrl: URL.createObjectURL(file) });
+      const previewUrl = URL.createObjectURL(file);
+      try {
+        // Se achica a un ancho razonable para OCR (más grande que las miniaturas de producto,
+        // para que la IA siga leyendo bien el texto de la boleta).
+        const compressed = await compressImage(file, 1600, 0.85);
+        const base64 = await blobToBase64(compressed);
+        results.push({ base64, mediaType: "image/jpeg", previewUrl });
+      } catch {
+        // Si por algún motivo no se pudo comprimir, se manda la original igual.
+        const base64 = await blobToBase64(file);
+        results.push({ base64, mediaType: file.type, previewUrl });
+      }
     }
     return results;
+  }
+
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve((reader.result as string).split(",")[1]);
+      reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+      reader.readAsDataURL(blob);
+    });
   }
 
   async function onPhotosSelected(files: FileList | null) {
@@ -64,29 +79,47 @@ export default function EscanearPage() {
   async function onPdfSelected(files: FileList | null) {
     if (!files || files.length === 0) return;
     const file = files[0];
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).split(",")[1]);
-      reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
-      reader.readAsDataURL(file);
-    });
+    if (file.size > 4 * 1024 * 1024) {
+      setErrorMsg("Ese PDF pesa demasiado (más de 4 MB). Prueba sacando una foto a la boleta en vez de subir el PDF.");
+      return;
+    }
+    const base64 = await blobToBase64(file);
     setPdf({ base64, name: file.name });
   }
 
   async function escanear() {
     setErrorMsg(null);
+
+    const payloadImages = photos.map((p) => ({ base64: p.base64, mediaType: p.mediaType }));
+    const payloadPdf = pdf ? { base64: pdf.base64 } : null;
+    const totalBase64Chars =
+      payloadImages.reduce((a, p) => a + p.base64.length, 0) + (payloadPdf ? payloadPdf.base64.length : 0);
+
+    // ~4MB en base64 (con margen bajo el límite real de 4.5MB del servidor).
+    if (totalBase64Chars > 4_000_000) {
+      setErrorMsg("Las fotos juntas pesan demasiado. Prueba escaneando menos fotos a la vez (2 o 3), o con menos zoom/resolución.");
+      return;
+    }
+
     setStep("loading");
 
     try {
       const res = await fetch("/api/gemini", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          images: photos.map((p) => ({ base64: p.base64, mediaType: p.mediaType })),
-          pdf: pdf ? { base64: pdf.base64 } : null,
-        }),
+        body: JSON.stringify({ images: payloadImages, pdf: payloadPdf }),
       });
-      const data = await res.json();
+
+      let data: { items?: ReviewItem[]; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? "Las fotos pesan demasiado para subir. Prueba con menos fotos a la vez."
+            : "El servidor no respondió correctamente. Intenta de nuevo en un momento."
+        );
+      }
       if (!res.ok || data.error) throw new Error(data.error || "No se pudo leer la boleta");
 
       setReviewItems(data.items as ReviewItem[]);
@@ -206,7 +239,7 @@ export default function EscanearPage() {
     return (
       <>
         <div className="eyebrow">Fotos de la boleta</div>
-        {errorMsg && <div className="callout callout-error">No logramos leer bien la boleta esta vez ({errorMsg}). Intenta con mejor luz/foco, revisa tu clave en Ajustes, o ingresa los productos a mano en Inventario.</div>}
+        {errorMsg && <div className="callout callout-error">{errorMsg}</div>}
         <div className="quick-actions" style={{ marginBottom: 14 }}>
           <label className="file-label" style={{ flex: 1, margin: 0, padding: "16px 10px" }}>
             <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => onPhotosSelected(e.target.files)} />
@@ -237,7 +270,7 @@ export default function EscanearPage() {
     return (
       <>
         <div className="eyebrow">PDF de la boleta o factura</div>
-        {errorMsg && <div className="callout callout-error">No logramos leer bien la boleta esta vez ({errorMsg}). Intenta de nuevo o ingresa los productos a mano en Inventario.</div>}
+        {errorMsg && <div className="callout callout-error">{errorMsg}</div>}
         <label className="file-label">
           <input type="file" accept="application/pdf" onChange={(e) => onPdfSelected(e.target.files)} />
           <div className="icon">📄</div>
