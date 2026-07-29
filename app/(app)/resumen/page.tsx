@@ -18,6 +18,15 @@ export default async function ResumenPage() {
   const productList = (products ?? []) as Product[];
   const debtorList = (debtors ?? []) as Debtor[];
 
+  const photoPaths = productList.map((p) => p.photo_path).filter((p): p is string => !!p);
+  const photoUrls: Record<string, string> = {};
+  if (photoPaths.length > 0) {
+    const { data: signed } = await supabase.storage.from("product-photos").createSignedUrls(photoPaths, 3600);
+    (signed ?? []).forEach((item) => {
+      if (item.signedUrl && item.path) photoUrls[item.path] = item.signedUrl;
+    });
+  }
+
   const gananciaVentas = (sales ?? []).reduce((a, s) => a + (Number(s.profit) || 0), 0);
   const gastos = (purchases ?? []).reduce((a, p) => a + (Number(p.amount) || 0), 0);
   const inventarioValor = productList.reduce((a, p) => a + p.cost * p.stock, 0);
@@ -78,7 +87,16 @@ export default async function ResumenPage() {
           productList.map((p) => (
             <div className="price-row" key={p.id}>
               <div className="row-left">
-                <div className="icon-circle">📦</div>
+                {p.photo_path && photoUrls[p.photo_path] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrls[p.photo_path]}
+                    alt={p.name}
+                    style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", marginRight: 11, flexShrink: 0 }}
+                  />
+                ) : (
+                  <div className="icon-circle">📦</div>
+                )}
                 <div>
                   <div className="p-name">{p.name}</div>
                   <div className="p-sub">
