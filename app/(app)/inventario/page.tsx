@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
-import type { Product } from "@/lib/types";
+import { CATEGORY_SUGGESTIONS, type Product } from "@/lib/types";
+
+const SIN_CATEGORIA = "Sin categoría";
 
 export default function InventarioPage() {
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", cost: "", price: "", stock: "" });
+  const [form, setForm] = useState({ name: "", category: "", cost: "", price: "", stock: "" });
 
   async function load() {
     const { data } = await supabase.from("products").select("*").order("name");
@@ -25,6 +27,20 @@ export default function InventarioPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const groups = useMemo(() => {
+    const map = new Map<string, Product[]>();
+    for (const p of products) {
+      const key = p.category?.trim() || SIN_CATEGORIA;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === SIN_CATEGORIA) return 1;
+      if (b === SIN_CATEGORIA) return -1;
+      return a.localeCompare(b, "es");
+    });
+  }, [products]);
+
   async function addProduct(e: React.FormEvent) {
     e.preventDefault();
     const {
@@ -35,6 +51,7 @@ export default function InventarioPage() {
     const { error } = await supabase.from("products").insert({
       user_id: user.id,
       name: form.name,
+      category: form.category || null,
       cost: parseFloat(form.cost) || 0,
       price: parseFloat(form.price) || 0,
       stock: parseFloat(form.stock) || 0,
@@ -43,7 +60,7 @@ export default function InventarioPage() {
       showToast("No se pudo agregar — intenta de nuevo");
       return;
     }
-    setForm({ name: "", cost: "", price: "", stock: "" });
+    setForm({ name: "", category: "", cost: "", price: "", stock: "" });
     setShowAdd(false);
     showToast(`"${form.name}" agregado a tu inventario ✓`);
     load();
@@ -52,6 +69,11 @@ export default function InventarioPage() {
   async function updateField(id: string, field: "price" | "stock", value: number) {
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
     await supabase.from("products").update({ [field]: value, updated_at: new Date().toISOString() }).eq("id", id);
+  }
+
+  async function updateCategory(id: string, value: string) {
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, category: value || null } : p)));
+    await supabase.from("products").update({ category: value || null, updated_at: new Date().toISOString() }).eq("id", id);
   }
 
   async function deleteProduct(id: string, name: string) {
@@ -65,46 +87,77 @@ export default function InventarioPage() {
     <>
       <div className="eyebrow">{loading ? "Cargando…" : `${products.length} producto${products.length === 1 ? "" : "s"}`}</div>
 
-      <div className="card">
-        {products.length === 0 && !loading ? (
+      {products.length === 0 && !loading && (
+        <div className="card">
           <div className="empty">Aún no tienes productos.</div>
-        ) : (
-          products.map((p) => (
-            <div className="product-row" key={p.id} style={{ display: "block" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <div className="p-name">{p.name}</div>
-                <button className="btn-danger-text" onClick={() => deleteProduct(p.id, p.name)}>
-                  Eliminar
-                </button>
-              </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <div style={{ flex: 1 }}>
-                  <label className="field-label">Precio</label>
-                  <input
-                    type="number"
-                    defaultValue={p.price}
-                    onBlur={(e) => updateField(p.id, "price", parseFloat(e.target.value) || 0)}
-                  />
+        </div>
+      )}
+
+      {groups.map(([category, items]) => (
+        <div key={category}>
+          <div className="eyebrow">
+            {category} · {items.length}
+          </div>
+          <div className="card">
+            {items.map((p) => (
+              <div className="product-row" key={p.id} style={{ display: "block" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <div className="p-name">{p.name}</div>
+                  <button className="btn-danger-text" onClick={() => deleteProduct(p.id, p.name)}>
+                    Eliminar
+                  </button>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label className="field-label">Stock</label>
-                  <input
-                    type="number"
-                    defaultValue={p.stock}
-                    onBlur={(e) => updateField(p.id, "stock", parseFloat(e.target.value) || 0)}
-                  />
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="field-label">Precio</label>
+                    <input
+                      type="number"
+                      defaultValue={p.price}
+                      onBlur={(e) => updateField(p.id, "price", parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="field-label">Stock</label>
+                    <input
+                      type="number"
+                      defaultValue={p.stock}
+                      onBlur={(e) => updateField(p.id, "stock", parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
                 </div>
+                <label className="field-label">Categoría</label>
+                <input
+                  type="text"
+                  list="categorias-sugeridas"
+                  defaultValue={p.category ?? ""}
+                  placeholder="Sin categoría"
+                  onBlur={(e) => updateCategory(p.id, e.target.value)}
+                />
+                <div className="p-sub">Costo: {money(p.cost)}</div>
               </div>
-              <div className="p-sub">Costo: {money(p.cost)}</div>
-            </div>
-          ))
-        )}
-      </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <datalist id="categorias-sugeridas">
+        {CATEGORY_SUGGESTIONS.map((c) => (
+          <option value={c} key={c} />
+        ))}
+      </datalist>
 
       {showAdd ? (
         <form className="card" onSubmit={addProduct}>
           <label className="field-label">Nombre</label>
           <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <label className="field-label">Categoría</label>
+          <input
+            type="text"
+            list="categorias-sugeridas"
+            value={form.category}
+            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            placeholder="Ej: Perfumería y cosmética"
+          />
           <label className="field-label">Costo</label>
           <input type="number" required value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
           <label className="field-label">Precio de venta</label>
