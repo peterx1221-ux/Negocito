@@ -149,10 +149,21 @@ export default function VenderPage() {
             <div className="callout">Todavía no tienes productos en tu inventario.</div>
           ) : (
             <select value={productId} onChange={(e) => setProductId(e.target.value)}>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} — stock {p.stock}
-                </option>
+              {Array.from(
+                products.reduce((map, p) => {
+                  const key = p.category?.trim() || "Sin categoría";
+                  if (!map.has(key)) map.set(key, []);
+                  map.get(key)!.push(p);
+                  return map;
+                }, new Map<string, Product[]>())
+              ).map(([category, items]) => (
+                <optgroup label={category} key={category}>
+                  {items.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — stock {p.stock}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           )}
