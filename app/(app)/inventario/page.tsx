@@ -7,21 +7,32 @@ import { money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
 import { CATEGORY_SUGGESTIONS, type Product } from "@/lib/types";
 import { matchesSearch } from "@/lib/search";
+import { compressImage } from "@/lib/image";
+import { uploadProductPhoto, deleteProductPhoto, getSignedUrls } from "@/lib/photos";
 
 const SIN_CATEGORIA = "Sin categoría";
 
 export default function InventarioPage() {
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", category: "", cost: "", price: "", stock: "" });
   const [search, setSearch] = useState("");
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   async function load() {
     const { data } = await supabase.from("products").select("*").order("name");
-    setProducts((data ?? []) as Product[]);
+    const list = (data ?? []) as Product[];
+    setProducts(list);
     setLoading(false);
+
+    const paths = list.map((p) => p.photo_path).filter((p): p is string => !!p);
+    if (paths.length > 0) {
+      const urls = await getSignedUrls(paths);
+      setPhotoUrls(urls);
+    }
   }
 
   useEffect(() => {
@@ -86,6 +97,41 @@ export default function InventarioPage() {
     showToast(`"${name}" eliminado`);
   }
 
+  async function onPhotoSelected(product: Product, file: File | undefined) {
+    if (!file) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setUploadingId(product.id);
+    try {
+      const blob = await compressImage(file);
+      const path = await uploadProductPhoto(user.id, product.id, blob);
+      if (!path) throw new Error();
+
+      await supabase.from("products").update({ photo_path: path, updated_at: new Date().toISOString() }).eq("id", product.id);
+      setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, photo_path: path } : p)));
+
+      const urls = await getSignedUrls([path]);
+      setPhotoUrls((prev) => ({ ...prev, ...urls }));
+      showToast("Foto guardada ✓");
+    } catch {
+      showToast("No se pudo subir la foto — intenta de nuevo");
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function removePhoto(product: Product) {
+    if (!product.photo_path) return;
+    if (!confirm("¿Quitar la foto de este producto?")) return;
+    await deleteProductPhoto(product.photo_path);
+    await supabase.from("products").update({ photo_path: null }).eq("id", product.id);
+    setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, photo_path: null } : p)));
+    showToast("Foto eliminada");
+  }
+
   return (
     <>
       <input
@@ -118,11 +164,55 @@ export default function InventarioPage() {
           <div className="card">
             {items.map((p) => (
               <div className="product-row" key={p.id} style={{ display: "block" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <div className="p-name">{p.name}</div>
-                  <button className="btn-danger-text" onClick={() => deleteProduct(p.id, p.name)}>
-                    Eliminar
-                  </button>
+                <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                  <label style={{ cursor: "pointer", flexShrink: 0 }}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => onPhotoSelected(p, e.target.files?.[0])}
+                    />
+                    {photoUrls[p.photo_path ?? ""] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photoUrls[p.photo_path ?? ""]}
+                        alt={p.name}
+                        style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", display: "block" }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: 10,
+                          background: "var(--paper-line)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 22,
+                        }}
+                      >
+                        {uploadingId === p.id ? "…" : "📷"}
+                      </div>
+                    )}
+                  </label>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div className="p-name">{p.name}</div>
+                      <button className="btn-danger-text" onClick={() => deleteProduct(p.id, p.name)}>
+                        Eliminar
+                      </button>
+                    </div>
+                    <div className="p-sub">
+                      {p.photo_path ? (
+                        <button className="btn-danger-text" style={{ padding: 0 }} onClick={() => removePhoto(p)}>
+                          Quitar foto
+                        </button>
+                      ) : (
+                        "Toca el ícono para agregar una foto"
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <div style={{ flex: 1 }}>
@@ -184,6 +274,9 @@ export default function InventarioPage() {
           <button className="btn btn-primary btn-block" type="submit">
             Guardar producto
           </button>
+          <div className="callout" style={{ marginTop: 10 }}>
+            Después de guardar, puedes tocar su ícono en la lista para agregarle una foto.
+          </div>
         </form>
       ) : (
         <button className="btn btn-ghost btn-block" style={{ marginBottom: 10 }} onClick={() => setShowAdd(true)}>
