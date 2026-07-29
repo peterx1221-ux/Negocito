@@ -11,6 +11,8 @@ type Step = "method" | "photos" | "pdf" | "loading" | "review" | "gastos" | "pre
 
 type PendingPhoto = { base64: string; mediaType: string; previewUrl: string };
 
+type PriceResult = { name: string; cost: number; qty: number; category: string; costoRealUnit: number; precioFinal: number };
+
 export default function EscanearPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -22,9 +24,7 @@ export default function EscanearPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [tripExpense, setTripExpense] = useState("0");
-  const [priceResults, setPriceResults] = useState
-    { name: string; cost: number; qty: number; category: string; costoRealUnit: number; precioFinal: number }[]
-  >([]);
+  const [priceResults, setPriceResults] = useState<PriceResult[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
