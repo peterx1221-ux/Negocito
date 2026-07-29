@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
 import { CATEGORY_SUGGESTIONS, type Product } from "@/lib/types";
+import { matchesSearch } from "@/lib/search";
 
 const SIN_CATEGORIA = "Sin categoría";
 
@@ -15,6 +16,7 @@ export default function InventarioPage() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: "", category: "", cost: "", price: "", stock: "" });
+  const [search, setSearch] = useState("");
 
   async function load() {
     const { data } = await supabase.from("products").select("*").order("name");
@@ -28,8 +30,9 @@ export default function InventarioPage() {
   }, []);
 
   const groups = useMemo(() => {
+    const filtered = products.filter((p) => matchesSearch(search, p.name, p.category));
     const map = new Map<string, Product[]>();
-    for (const p of products) {
+    for (const p of filtered) {
       const key = p.category?.trim() || SIN_CATEGORIA;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(p);
@@ -39,7 +42,7 @@ export default function InventarioPage() {
       if (b === SIN_CATEGORIA) return -1;
       return a.localeCompare(b, "es");
     });
-  }, [products]);
+  }, [products, search]);
 
   async function addProduct(e: React.FormEvent) {
     e.preventDefault();
@@ -85,11 +88,25 @@ export default function InventarioPage() {
 
   return (
     <>
+      <input
+        type="text"
+        placeholder="🔎 Buscar por nombre o categoría…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{ marginBottom: 6 }}
+      />
+
       <div className="eyebrow">{loading ? "Cargando…" : `${products.length} producto${products.length === 1 ? "" : "s"}`}</div>
 
       {products.length === 0 && !loading && (
         <div className="card">
           <div className="empty">Aún no tienes productos.</div>
+        </div>
+      )}
+
+      {products.length > 0 && groups.length === 0 && (
+        <div className="card">
+          <div className="empty">No encontramos nada para &ldquo;{search}&rdquo;.</div>
         </div>
       )}
 
