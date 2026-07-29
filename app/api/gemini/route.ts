@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-const INSTRUCTIONS = `Eres un asistente que lee boletas de compra chilenas. Puede haber varias fotos que son tramos consecutivos de una misma boleta larga (de arriba hacia abajo, con posible traslape entre ellas) — únelos en una sola lista sin duplicar productos que aparezcan repetidos por el traslape. Devuelve SOLO un JSON válido, sin texto adicional ni backticks, con este formato exacto:
-{"items":[{"nombre":"...", "costo_unitario":1234, "cantidad":1, "confianza":"alta"}], "total_boleta":12345}
-Si un nombre no se lee con claridad, usa tu mejor inferencia igual y pon "confianza":"baja" en ese ítem. Los costos son números enteros en pesos chilenos, sin puntos ni signos.`;
+const INSTRUCTIONS = `Eres un asistente que lee boletas de compra chilenas. Puede haber varias fotos que son tramos consecutivos de una misma boleta larga (de arriba hacia abajo, con posible traslape entre ellas) — únelos en una sola lista sin duplicar productos que aparezcan repetidos por el traslape.
 
-type ItemIn = { nombre: string; costo_unitario: number; cantidad?: number; confianza?: string };
+Para cada producto:
+- Si el nombre viene en otro idioma (por ejemplo chino), tradúcelo al español lo mejor que puedas y usa esa traducción como nombre. Si no logras traducirlo con confianza, déjalo como aparece en la boleta y marca "confianza":"baja".
+- Sugiere una "categoria" corta en español que más se ajuste, usando de preferencia una de estas: "Perfumería y cosmética", "Aseo y limpieza", "Alimentos y bebidas", "Hogar y bazar", "Ropa y accesorios", "Otros". Si ninguna calza bien, propone tú una categoría corta y clara.
+- Si un nombre no se lee con claridad por cualquier motivo (letra borrosa, abreviatura rara, texto en otro idioma que no pudiste traducir), usa tu mejor inferencia igual y pon "confianza":"baja" en ese ítem.
+
+Devuelve SOLO un JSON válido, sin texto adicional ni backticks, con este formato exacto:
+{"items":[{"nombre":"...", "costo_unitario":1234, "cantidad":1, "confianza":"alta", "categoria":"..."}], "total_boleta":12345}
+Los costos son números enteros en pesos chilenos, sin puntos ni signos.`;
+
+type ItemIn = { nombre: string; costo_unitario: number; cantidad?: number; confianza?: string; categoria?: string };
 
 export async function POST(request: Request) {
   // 1) Confirmar sesión — nadie puede usar esta ruta sin haber iniciado sesión.
@@ -48,7 +55,7 @@ export async function POST(request: Request) {
   images.forEach((img) => parts.push({ inline_data: { mime_type: img.mediaType, data: img.base64 } }));
   if (pdf) parts.push({ inline_data: { mime_type: "application/pdf", data: pdf.base64 } });
 
-  const model = settings.gemini_model || "gemini-2.5-flash";
+  const model = settings.gemini_model || "gemini-3.6-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   try {
@@ -80,6 +87,7 @@ export async function POST(request: Request) {
       cost: it.costo_unitario,
       qty: it.cantidad || 1,
       confidence: it.confianza === "baja" ? "baja" : "alta",
+      category: it.categoria?.trim() || "Otros",
     }));
 
     if (items.length === 0) {
