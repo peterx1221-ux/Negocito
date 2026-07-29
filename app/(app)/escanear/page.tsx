@@ -22,7 +22,7 @@ export default function EscanearPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [tripExpense, setTripExpense] = useState("0");
-  const [priceResults, setPriceResults] = useState<
+  const [priceResults, setPriceResults] = useState
     { name: string; cost: number; qty: number; costoRealUnit: number; precioFinal: number }[]
   >([]);
   const [saving, setSaving] = useState(false);
@@ -206,11 +206,18 @@ export default function EscanearPage() {
       <>
         <div className="eyebrow">Fotos de la boleta</div>
         {errorMsg && <div className="callout callout-error">No logramos leer bien la boleta esta vez ({errorMsg}). Intenta con mejor luz/foco, revisa tu clave en Ajustes, o ingresa los productos a mano en Inventario.</div>}
-        <label className="file-label">
-          <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => onPhotosSelected(e.target.files)} />
-          <div className="icon">📷</div>
-          <p>Toca para tomar o elegir fotos</p>
-        </label>
+        <div className="quick-actions" style={{ marginBottom: 14 }}>
+          <label className="file-label" style={{ flex: 1, margin: 0, padding: "16px 10px" }}>
+            <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => onPhotosSelected(e.target.files)} />
+            <div className="icon">📷</div>
+            <p>Tomar foto</p>
+          </label>
+          <label className="file-label" style={{ flex: 1, margin: 0, padding: "16px 10px" }}>
+            <input type="file" accept="image/*" multiple onChange={(e) => onPhotosSelected(e.target.files)} />
+            <div className="icon">🖼️</div>
+            <p>Elegir de galería</p>
+          </label>
+        </div>
         {photos.map((p, i) => (
           <div className="photo-thumb" key={i}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
