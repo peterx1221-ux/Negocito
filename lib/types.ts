@@ -2,12 +2,23 @@ export type Product = {
   id: string;
   user_id: string;
   name: string;
+  category: string | null;
   cost: number;
   price: number;
   stock: number;
   created_at?: string;
   updated_at?: string;
 };
+
+/** Categorías sugeridas para mantener consistencia — no es una lista cerrada, se puede escribir otra. */
+export const CATEGORY_SUGGESTIONS = [
+  "Perfumería y cosmética",
+  "Aseo y limpieza",
+  "Alimentos y bebidas",
+  "Hogar y bazar",
+  "Ropa y accesorios",
+  "Otros",
+];
 
 export type PricingRules = {
   low_max: number;
@@ -54,7 +65,7 @@ export function defaultSettingsPublic(user_id: string): SettingsPublic {
   return {
     user_id,
     ...DEFAULT_PRICING_RULES,
-    gemini_model: "gemini-2.5-flash",
+    gemini_model: "gemini-3.6-flash",
     gemini_key_set: false,
   };
 }
@@ -104,4 +115,5 @@ export type ReviewItem = {
   cost: number;
   qty: number;
   confidence: "alta" | "baja";
+  category: string;
 };
