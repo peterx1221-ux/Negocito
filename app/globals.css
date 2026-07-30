@@ -288,6 +288,35 @@ input[type="email"] {
   background: #fff;
   color: var(--ink);
 }
+
+.search-input-wrap {
+  position: relative;
+  margin-bottom: 12px;
+}
+.search-input-wrap input {
+  margin-bottom: 0;
+  padding-right: 40px;
+}
+.search-mic-btn {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 17px;
+  line-height: 1;
+  padding: 8px;
+  cursor: pointer;
+}
+.search-mic-btn.listening {
+  animation: mic-pulse 1s infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 label.field-label {
   font-size: 12px;
   font-weight: 600;
