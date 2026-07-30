@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
 import { CATEGORY_SUGGESTIONS, type Product } from "@/lib/types";
-import { matchesSearch } from "@/lib/search";
+import { smartFilter } from "@/lib/search";
 import { compressImage } from "@/lib/image";
 import { uploadProductPhoto, deleteProductPhoto, getSignedUrls } from "@/lib/photos";
+import SearchInput from "@/components/SearchInput";
 
 const SIN_CATEGORIA = "Sin categoría";
 
@@ -41,7 +42,7 @@ export default function InventarioPage() {
   }, []);
 
   const groups = useMemo(() => {
-    const filtered = products.filter((p) => matchesSearch(search, p.name, p.category));
+    const filtered = smartFilter(search, products);
     const map = new Map<string, Product[]>();
     for (const p of filtered) {
       const key = p.category?.trim() || SIN_CATEGORIA;
@@ -134,12 +135,10 @@ export default function InventarioPage() {
 
   return (
     <>
-      <input
-        type="text"
-        placeholder="🔎 Buscar por nombre o categoría…"
+      <SearchInput
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{ marginBottom: 6 }}
+        onChange={setSearch}
+        placeholder="🔎 Buscar, o di algo como “aseo bajo $2000”…"
       />
 
       <div className="eyebrow">{loading ? "Cargando…" : `${products.length} producto${products.length === 1 ? "" : "s"}`}</div>
