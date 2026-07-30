@@ -48,6 +48,7 @@ export default function AjustesPage() {
       mid_min_profit: settings.mid_min_profit,
       high_percent: settings.high_percent,
       rounding: settings.rounding,
+      remate_percent: settings.remate_percent,
       gemini_model: settings.gemini_model,
     });
     setSaving(false);
@@ -136,6 +137,19 @@ export default function AjustesPage() {
           </div>
         </div>
 
+        <div className="tier-row">
+          <div className="th">🔥 Remate</div>
+          <div className="tier-inline">
+            <span>Margen</span>
+            <input
+              type="number"
+              value={settings.remate_percent}
+              onChange={(e) => set("remate_percent", parseFloat(e.target.value) || 0)}
+            />
+            <span>% sobre el costo</span>
+          </div>
+        </div>
+
         <label className="field-label">Redondeo de precio final</label>
         <select value={settings.rounding} onChange={(e) => set("rounding", e.target.value as SettingsPublic["rounding"])}>
           <option value="990">Terminación .990</option>
@@ -147,7 +161,7 @@ export default function AjustesPage() {
           {saving ? "Guardando…" : "Guardar reglas"}
         </button>
         <div className="callout" style={{ marginTop: 12 }}>
-          Estas reglas solo sugieren el precio — siempre puedes cambiarlo a mano al vender o al agregar una boleta.
+          Estas reglas solo sugieren el precio — siempre puedes cambiarlo a mano al vender o al agregar una boleta. Lo mismo aplica al margen de remate: es solo una sugerencia de partida.
         </div>
       </form>
 
