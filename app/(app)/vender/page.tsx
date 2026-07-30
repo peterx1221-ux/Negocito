@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
 import type { Product } from "@/lib/types";
 import { smartFilter } from "@/lib/search";
@@ -71,7 +72,7 @@ export default function VenderPage() {
         return;
       }
       name = selected.name;
-      unitPrice = selected.price;
+      unitPrice = selected.is_remate && selected.remate_price != null ? selected.remate_price : selected.price;
       unitCost = selected.cost;
     } else {
       if (!manualName.trim()) {
@@ -182,12 +183,18 @@ export default function VenderPage() {
                     <optgroup label={category} key={category}>
                       {items.map((p) => (
                         <option key={p.id} value={p.id}>
+                          {p.is_remate ? "🔥 " : ""}
                           {p.name} — stock {p.stock}
                         </option>
                       ))}
                     </optgroup>
                   ))}
                 </select>
+              )}
+              {selected?.is_remate && selected.remate_price != null && (
+                <div className="callout" style={{ marginTop: 8 }}>
+                  🔥 Este producto está en remate — se vende a {money(selected.remate_price)} en vez de {money(selected.price)}.
+                </div>
               )}
             </>
           )}
