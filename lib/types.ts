@@ -7,6 +7,8 @@ export type Product = {
   cost: number;
   price: number;
   stock: number;
+  is_remate: boolean;
+  remate_price: number | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -29,6 +31,8 @@ export type PricingRules = {
   mid_min_profit: number;
   high_percent: number;
   rounding: "990" | "500" | "none";
+  /** Margen (%) usado para sugerir precio cuando un producto se marca "en remate" — siempre más chico que los márgenes normales. */
+  remate_percent: number;
 };
 
 export const DEFAULT_PRICING_RULES: PricingRules = {
@@ -39,6 +43,7 @@ export const DEFAULT_PRICING_RULES: PricingRules = {
   mid_min_profit: 500,
   high_percent: 35,
   rounding: "990",
+  remate_percent: 15,
 };
 
 /**
@@ -73,7 +78,7 @@ export function defaultSettingsPublic(user_id: string): SettingsPublic {
 
 /** Columnas seguras para pedir desde el cliente (excluye gemini_key a propósito). */
 export const SETTINGS_PUBLIC_COLUMNS =
-  "user_id, low_max, low_price, mid_max, mid_percent, mid_min_profit, high_percent, rounding, gemini_model, gemini_key_set";
+  "user_id, low_max, low_price, mid_max, mid_percent, mid_min_profit, high_percent, rounding, remate_percent, gemini_model, gemini_key_set";
 
 export type Sale = {
   id: string;
@@ -117,4 +122,13 @@ export type ReviewItem = {
   qty: number;
   confidence: "alta" | "baja";
   category: string;
+};
+
+export type PriceHistoryEntry = {
+  id: string;
+  user_id: string;
+  product_id: string | null;
+  product_name: string;
+  cost: number;
+  date: string;
 };
