@@ -7,12 +7,16 @@ import { calcSuggestedPrice, tierLabel, money } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
 import { SETTINGS_PUBLIC_COLUMNS, defaultSettingsPublic, CATEGORY_SUGGESTIONS, type SettingsPublic, type ReviewItem, type Product } from "@/lib/types";
 import { compressImage } from "@/lib/image";
+import { uploadProductPhoto, getSignedUrls } from "@/lib/photos";
 
-type Step = "method" | "photos" | "pdf" | "loading" | "review" | "gastos" | "precios" | "sin-clave";
+type Step = "method" | "photos" | "pdf" | "loading" | "review" | "gastos" | "precios" | "fotos" | "sin-clave";
 
 type PendingPhoto = { base64: string; mediaType: string; previewUrl: string };
 
 type PriceResult = { name: string; cost: number; qty: number; category: string; costoRealUnit: number; precioFinal: number };
+
+/** Producto ya guardado en el inventario (recién creado o actualizado) al que se le puede agregar foto. */
+type SavedProduct = { id: string; name: string; photo_path: string | null };
 
 export default function EscanearPage() {
   const supabase = createClient();
@@ -27,6 +31,9 @@ export default function EscanearPage() {
   const [tripExpense, setTripExpense] = useState("0");
   const [priceResults, setPriceResults] = useState<PriceResult[]>([]);
   const [saving, setSaving] = useState(false);
+  const [savedProducts, setSavedProducts] = useState<SavedProduct[]>([]);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -159,6 +166,7 @@ export default function EscanearPage() {
     const existing = (existingProducts ?? []) as Product[];
 
     let totalCompra = 0;
+    const saved: SavedProduct[] = [];
 
     for (const r of priceResults) {
       totalCompra += r.cost * r.qty;
@@ -168,15 +176,21 @@ export default function EscanearPage() {
           .from("products")
           .update({ stock: match.stock + r.qty, cost: r.cost, price: r.precioFinal, updated_at: new Date().toISOString() })
           .eq("id", match.id);
+        saved.push({ id: match.id, name: match.name, photo_path: match.photo_path });
       } else {
-        await supabase.from("products").insert({
-          user_id: user.id,
-          name: r.name,
-          category: r.category,
-          cost: r.cost,
-          price: r.precioFinal,
-          stock: r.qty,
-        });
+        const { data: inserted } = await supabase
+          .from("products")
+          .insert({
+            user_id: user.id,
+            name: r.name,
+            category: r.category,
+            cost: r.cost,
+            price: r.precioFinal,
+            stock: r.qty,
+          })
+          .select()
+          .single();
+        if (inserted) saved.push({ id: inserted.id, name: inserted.name, photo_path: null });
       }
     }
 
@@ -193,6 +207,40 @@ export default function EscanearPage() {
 
     setSaving(false);
     showToast(`Se agregaron ${priceResults.length} producto(s) a tu inventario ✓`);
+
+    setSavedProducts(saved);
+    const paths = saved.map((p) => p.photo_path).filter((p): p is string => !!p);
+    if (paths.length > 0) setPhotoUrls(await getSignedUrls(paths));
+    setStep("fotos");
+  }
+
+  async function onFotoSelected(product: SavedProduct, file: File | undefined) {
+    if (!file) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    setUploadingId(product.id);
+    try {
+      const blob = await compressImage(file);
+      const path = await uploadProductPhoto(user.id, product.id, blob);
+      if (!path) throw new Error();
+
+      await supabase.from("products").update({ photo_path: path, updated_at: new Date().toISOString() }).eq("id", product.id);
+      setSavedProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, photo_path: path } : p)));
+
+      const urls = await getSignedUrls([path]);
+      setPhotoUrls((prev) => ({ ...prev, ...urls }));
+      showToast("Foto guardada ✓");
+    } catch {
+      showToast("No se pudo subir la foto — intenta de nuevo");
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  function terminarEscaneo() {
     router.push("/inventario");
     router.refresh();
   }
@@ -344,28 +392,84 @@ export default function EscanearPage() {
     );
   }
 
-  // step === "precios"
+  if (step === "precios") {
+    return (
+      <>
+        <div className="eyebrow">Precios sugeridos</div>
+        {priceResults.map((r, i) => (
+          <div className="price-tier-card" key={i}>
+            <div className="name">{r.name}</div>
+            <div className="tierlabel" style={{ marginRight: 6 }}>{r.category}</div>
+            <div className="breakdown">Costo real: {money(r.costoRealUnit)} (costo + gasto del viaje repartido)</div>
+            <div className="tierlabel">{settings ? tierLabel(r.costoRealUnit, settings) : ""}</div>
+            <input
+              type="number"
+              value={r.precioFinal}
+              onChange={(e) =>
+                setPriceResults((prev) => prev.map((p, idx) => (idx === i ? { ...p, precioFinal: parseFloat(e.target.value) || 0 } : p)))
+              }
+            />
+          </div>
+        ))}
+        <div className="callout">Tú decides — puedes dejar el precio sugerido o cambiarlo, como siempre.</div>
+        <button className="btn btn-primary btn-block" disabled={saving} onClick={guardarEnInventario}>
+          {saving ? "Guardando…" : "Guardar en mi inventario"}
+        </button>
+      </>
+    );
+  }
+
+  // step === "fotos"
   return (
     <>
-      <div className="eyebrow">Precios sugeridos</div>
-      {priceResults.map((r, i) => (
-        <div className="price-tier-card" key={i}>
-          <div className="name">{r.name}</div>
-          <div className="tierlabel" style={{ marginRight: 6 }}>{r.category}</div>
-          <div className="breakdown">Costo real: {money(r.costoRealUnit)} (costo + gasto del viaje repartido)</div>
-          <div className="tierlabel">{settings ? tierLabel(r.costoRealUnit, settings) : ""}</div>
-          <input
-            type="number"
-            value={r.precioFinal}
-            onChange={(e) =>
-              setPriceResults((prev) => prev.map((p, idx) => (idx === i ? { ...p, precioFinal: parseFloat(e.target.value) || 0 } : p)))
-            }
-          />
-        </div>
-      ))}
-      <div className="callout">Tú decides — puedes dejar el precio sugerido o cambiarlo, como siempre.</div>
-      <button className="btn btn-primary btn-block" disabled={saving} onClick={guardarEnInventario}>
-        {saving ? "Guardando…" : "Guardar en mi inventario"}
+      <div className="eyebrow">Ya está en tu inventario ✓</div>
+      <div className="callout">
+        Aprovecha de agregarles una foto ahora, así no tienes que volver a repasar el inventario después solo para eso. Es opcional.
+      </div>
+      <div className="card">
+        {savedProducts.map((p) => (
+          <div className="product-row" key={p.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <label style={{ cursor: "pointer", flexShrink: 0 }}>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: "none" }}
+                onChange={(e) => onFotoSelected(p, e.target.files?.[0])}
+              />
+              {photoUrls[p.photo_path ?? ""] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoUrls[p.photo_path ?? ""]}
+                  alt={p.name}
+                  style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", display: "block" }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 10,
+                    background: "var(--paper-line)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 22,
+                  }}
+                >
+                  {uploadingId === p.id ? "…" : "📷"}
+                </div>
+              )}
+            </label>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="p-name">{p.name}</div>
+              <div className="p-sub">{p.photo_path ? "Foto agregada ✓" : "Toca el ícono para agregar una foto"}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="btn btn-primary btn-block" onClick={terminarEscaneo}>
+        Listo
       </button>
     </>
   );
