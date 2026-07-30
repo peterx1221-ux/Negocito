@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { showToast } from "@/lib/toast";
 import type { Product } from "@/lib/types";
-import { matchesSearch } from "@/lib/search";
+import { smartFilter } from "@/lib/search";
+import SearchInput from "@/components/SearchInput";
 
 export default function VenderPage() {
   const supabase = createClient();
@@ -35,7 +36,7 @@ export default function VenderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredProducts = products.filter((p) => matchesSearch(search, p.name, p.category));
+  const filteredProducts = smartFilter(search, products);
 
   useEffect(() => {
     if (filteredProducts.length === 0) return;
@@ -161,11 +162,10 @@ export default function VenderPage() {
             <div className="callout">Todavía no tienes productos en tu inventario.</div>
           ) : (
             <>
-              <input
-                type="text"
-                placeholder="🔎 Buscar producto…"
+              <SearchInput
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={setSearch}
+                placeholder="🔎 Buscar, o di algo como “aseo bajo $2000”…"
               />
               {filteredProducts.length === 0 ? (
                 <div className="callout">No encontramos nada para &ldquo;{search}&rdquo;.</div>
