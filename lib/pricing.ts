@@ -36,6 +36,17 @@ export function tierLabel(costoReal: number, settings: PricingRules): string {
   return `Tramo alto · ${settings.high_percent}% margen`;
 }
 
+/**
+ * Precio sugerido cuando un producto se marca "en remate": mismo costo + un
+ * margen más chico (settings.remate_percent) en vez de los tramos normales.
+ * Se redondea siempre hacia arriba a los $50 más cercanos, para no vender
+ * nunca al costo o regalado — pero igual queda editable a mano, como todo.
+ */
+export function calcRematePrice(costoReal: number, settings: PricingRules): number {
+  const raw = costoReal * (1 + settings.remate_percent / 100);
+  return Math.ceil(raw / 50) * 50;
+}
+
 export function money(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-CL");
 }
