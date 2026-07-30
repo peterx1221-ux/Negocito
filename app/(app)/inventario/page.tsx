@@ -3,9 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { money } from "@/lib/pricing";
+import { money, calcRematePrice } from "@/lib/pricing";
 import { showToast } from "@/lib/toast";
-import { CATEGORY_SUGGESTIONS, type Product } from "@/lib/types";
+import {
+  CATEGORY_SUGGESTIONS,
+  SETTINGS_PUBLIC_COLUMNS,
+  defaultSettingsPublic,
+  type Product,
+  type SettingsPublic,
+} from "@/lib/types";
 import { smartFilter } from "@/lib/search";
 import { compressImage } from "@/lib/image";
 import { uploadProductPhoto, deleteProductPhoto, getSignedUrls } from "@/lib/photos";
@@ -16,6 +22,7 @@ const SIN_CATEGORIA = "Sin categoría";
 export default function InventarioPage() {
   const supabase = createClient();
   const [products, setProducts] = useState<Product[]>([]);
+  const [settings, setSettings] = useState<SettingsPublic | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -23,7 +30,17 @@ export default function InventarioPage() {
   const [search, setSearch] = useState("");
   const [uploadingId, setUploadingId] = useState<string | null>(null);
 
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkCategory, setShowBulkCategory] = useState(false);
+  const [bulkCategoryValue, setBulkCategoryValue] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   async function load() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     const { data } = await supabase.from("products").select("*").order("name");
     const list = (data ?? []) as Product[];
     setProducts(list);
@@ -33,6 +50,11 @@ export default function InventarioPage() {
     if (paths.length > 0) {
       const urls = await getSignedUrls(paths);
       setPhotoUrls(urls);
+    }
+
+    if (user) {
+      const { data: s } = await supabase.from("settings").select(SETTINGS_PUBLIC_COLUMNS).eq("user_id", user.id).single();
+      setSettings((s as SettingsPublic) ?? defaultSettingsPublic(user.id));
     }
   }
 
@@ -81,7 +103,7 @@ export default function InventarioPage() {
     load();
   }
 
-  async function updateField(id: string, field: "price" | "stock", value: number) {
+  async function updateField(id: string, field: "price" | "stock" | "remate_price", value: number) {
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
     await supabase.from("products").update({ [field]: value, updated_at: new Date().toISOString() }).eq("id", id);
   }
@@ -133,6 +155,90 @@ export default function InventarioPage() {
     showToast("Foto eliminada");
   }
 
+  // ---- Modo selección / acciones en lote ----
+
+  function toggleSelectMode() {
+    setSelectMode((v) => !v);
+    setSelectedIds(new Set());
+    setShowBulkCategory(false);
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulkDelete() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!confirm(`¿Eliminar ${ids.length} producto${ids.length === 1 ? "" : "s"} de tu inventario?`)) return;
+
+    setBulkBusy(true);
+    const toDelete = products.filter((p) => selectedIds.has(p.id));
+    for (const p of toDelete) {
+      if (p.photo_path) await deleteProductPhoto(p.photo_path);
+    }
+    await supabase.from("products").delete().in("id", ids);
+    setProducts((prev) => prev.filter((p) => !selectedIds.has(p.id)));
+    setSelectedIds(new Set());
+    setBulkBusy(false);
+    showToast(`${ids.length} producto${ids.length === 1 ? "" : "s"} eliminado${ids.length === 1 ? "" : "s"}`);
+  }
+
+  async function bulkSetCategory() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const value = bulkCategoryValue.trim();
+
+    setBulkBusy(true);
+    await supabase.from("products").update({ category: value || null, updated_at: new Date().toISOString() }).in("id", ids);
+    setProducts((prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, category: value || null } : p)));
+    setBulkBusy(false);
+    setShowBulkCategory(false);
+    setBulkCategoryValue("");
+    setSelectedIds(new Set());
+    showToast("Categoría actualizada ✓");
+  }
+
+  async function bulkMarkRemate() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0 || !settings) return;
+
+    setBulkBusy(true);
+    const toMark = products.filter((p) => selectedIds.has(p.id));
+    for (const p of toMark) {
+      const remate_price = calcRematePrice(p.cost, settings);
+      await supabase
+        .from("products")
+        .update({ is_remate: true, remate_price, updated_at: new Date().toISOString() })
+        .eq("id", p.id);
+    }
+    setProducts((prev) =>
+      prev.map((p) =>
+        selectedIds.has(p.id) ? { ...p, is_remate: true, remate_price: calcRematePrice(p.cost, settings) } : p
+      )
+    );
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    showToast(`${ids.length} producto${ids.length === 1 ? "" : "s"} en remate 🔥`);
+  }
+
+  async function bulkUnmarkRemate() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    setBulkBusy(true);
+    await supabase.from("products").update({ is_remate: false, updated_at: new Date().toISOString() }).in("id", ids);
+    setProducts((prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, is_remate: false } : p)));
+    setBulkBusy(false);
+    setSelectedIds(new Set());
+    showToast("Se quitó el remate");
+  }
+
   return (
     <>
       <SearchInput
@@ -141,7 +247,86 @@ export default function InventarioPage() {
         placeholder="🔎 Buscar, o di algo como “aseo bajo $2000”…"
       />
 
-      <div className="eyebrow">{loading ? "Cargando…" : `${products.length} producto${products.length === 1 ? "" : "s"}`}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div className="eyebrow" style={{ marginBottom: 0 }}>
+          {loading ? "Cargando…" : `${products.length} producto${products.length === 1 ? "" : "s"}`}
+        </div>
+        {!loading && products.length > 0 && (
+          <button type="button" className="btn-danger-text" onClick={toggleSelectMode}>
+            {selectMode ? "Cancelar selección" : "Seleccionar"}
+          </button>
+        )}
+      </div>
+
+      {selectMode && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="p-sub" style={{ marginBottom: 10 }}>
+            {selectedIds.size === 0
+              ? "Toca los productos de la lista para seleccionarlos."
+              : `${selectedIds.size} producto${selectedIds.size === 1 ? "" : "s"} seleccionado${selectedIds.size === 1 ? "" : "s"}`}
+          </div>
+
+          {showBulkCategory ? (
+            <>
+              <label className="field-label">Nueva categoría para los seleccionados</label>
+              <input
+                type="text"
+                list="categorias-sugeridas"
+                value={bulkCategoryValue}
+                onChange={(e) => setBulkCategoryValue(e.target.value)}
+                placeholder="Ej: Perfumería y cosmética"
+              />
+              <div className="quick-actions">
+                <button className="btn btn-primary" style={{ flex: 1 }} disabled={bulkBusy} onClick={bulkSetCategory}>
+                  Aplicar
+                </button>
+                <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setShowBulkCategory(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="quick-actions" style={{ flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, minWidth: 130 }}
+                disabled={selectedIds.size === 0 || bulkBusy}
+                onClick={() => setShowBulkCategory(true)}
+              >
+                Cambiar categoría
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, minWidth: 130 }}
+                disabled={selectedIds.size === 0 || bulkBusy}
+                onClick={bulkMarkRemate}
+              >
+                🔥 Marcar en remate
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1, minWidth: 130 }}
+                disabled={selectedIds.size === 0 || bulkBusy}
+                onClick={bulkUnmarkRemate}
+              >
+                Quitar remate
+              </button>
+              <button
+                type="button"
+                className="btn-danger-text"
+                style={{ flex: 1, minWidth: 130 }}
+                disabled={selectedIds.size === 0 || bulkBusy}
+                onClick={bulkDelete}
+              >
+                Eliminar seleccionados
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {products.length === 0 && !loading && (
         <div className="card">
@@ -164,6 +349,14 @@ export default function InventarioPage() {
             {items.map((p) => (
               <div className="product-row" key={p.id} style={{ display: "block" }}>
                 <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                  {selectMode && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(p.id)}
+                      onChange={() => toggleSelected(p.id)}
+                      style={{ width: 20, height: 20, flexShrink: 0, marginTop: 18 }}
+                    />
+                  )}
                   <label style={{ cursor: "pointer", flexShrink: 0 }}>
                     <input
                       type="file"
@@ -197,10 +390,15 @@ export default function InventarioPage() {
                   </label>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                      <div className="p-name">{p.name}</div>
-                      <button className="btn-danger-text" onClick={() => deleteProduct(p.id, p.name)}>
-                        Eliminar
-                      </button>
+                      <div className="p-name">
+                        {p.is_remate && "🔥 "}
+                        {p.name}
+                      </div>
+                      {!selectMode && (
+                        <button className="btn-danger-text" onClick={() => deleteProduct(p.id, p.name)}>
+                          Eliminar
+                        </button>
+                      )}
                     </div>
                     <div className="p-sub">
                       {p.photo_path ? (
@@ -231,6 +429,20 @@ export default function InventarioPage() {
                     />
                   </div>
                 </div>
+                {p.is_remate && (
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="field-label" style={{ color: "var(--rust)" }}>
+                        🔥 Precio remate
+                      </label>
+                      <input
+                        type="number"
+                        defaultValue={p.remate_price ?? 0}
+                        onBlur={(e) => updateField(p.id, "remate_price", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                )}
                 <label className="field-label">Categoría</label>
                 <input
                   type="text"
