@@ -133,6 +133,9 @@ body {
   color: #9fe0ae;
 }
 .num-neg {
+  .num-pending {
+  color: #f0d199;
+}
   color: #f0a79c;
 }
 .ledger-card .num.total {
