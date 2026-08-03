@@ -202,10 +202,10 @@ body {
   color: #9fe0ae;
 }
 .num-neg {
-  .num-pending {
-  color: #f0d199;
-}
   color: #f0a79c;
+}
+.num-pending {
+  color: #f0d199;
 }
 .ledger-card .num.total {
   font-size: 22px;
@@ -360,7 +360,6 @@ input[type="email"] {
   background: #fff;
   color: var(--ink);
 }
-
 .search-input-wrap {
   position: relative;
   margin-bottom: 12px;
@@ -388,7 +387,6 @@ input[type="email"] {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
-
 label.field-label {
   font-size: 12px;
   font-weight: 600;
@@ -486,7 +484,6 @@ label.field-label {
   color: var(--ink-soft);
   margin-bottom: 8px;
 }
-
 .badge {
   font-size: 10px;
   font-family: "IBM Plex Mono", monospace;
@@ -497,7 +494,6 @@ label.field-label {
   display: inline-block;
   white-space: nowrap;
 }
-
 .price-tier-card .tierlabel {
   font-size: 10px;
   font-family: "IBM Plex Mono", monospace;
