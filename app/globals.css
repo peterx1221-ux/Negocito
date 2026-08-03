@@ -414,6 +414,18 @@ label.field-label {
   color: var(--ink-soft);
   margin-bottom: 8px;
 }
+
+.badge {
+  font-size: 10px;
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--teal);
+  background: #eaf3f1;
+  padding: 2px 7px;
+  border-radius: 10px;
+  display: inline-block;
+  white-space: nowrap;
+}
+
 .price-tier-card .tierlabel {
   font-size: 10px;
   font-family: "IBM Plex Mono", monospace;
