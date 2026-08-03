@@ -123,6 +123,7 @@ export default function VenderPage() {
         sale_id: sale.id,
         name: buyer || "Sin nombre",
         amount: unitPrice * qty,
+        paid_amount: 0,
         paid: false,
       });
     }
