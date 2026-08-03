@@ -34,9 +34,6 @@ export default async function ResumenPage() {
   const inventarioValor = productList.reduce((a, p) => a + p.cost * p.stock, 0);
   const deudaTotal = debtorList.reduce((a, d) => a + Math.max(0, d.amount - d.paid_amount), 0);
 
-  const bajoStock = productList.filter((p) => p.stock <= 2).slice(0, 2);
-  const deudoresAlerta = debtorList.slice(0, 2);
-
   return (
     <>
       <div className="ledger-card">
@@ -76,17 +73,6 @@ export default async function ResumenPage() {
       <Link href="/estadisticas" className="btn btn-ghost btn-block" style={{ marginBottom: 12 }}>
         📊 Ver estadísticas
       </Link>
-
-      {bajoStock.map((p) => (
-        <div className="alert-card" key={p.id}>
-          ⚠️ Queda{p.stock === 1 ? "" : "n"} {p.stock} unidad{p.stock === 1 ? "" : "es"} de &ldquo;{p.name}&rdquo; — stock bajo
-        </div>
-      ))}
-      {deudoresAlerta.map((d) => (
-        <div className="alert-card" key={d.id}>
-          🕒 {d.name} te debe {money(d.amount)}
-        </div>
-      ))}
 
       <div className="eyebrow">Precios de tus productos</div>
       <div className="card">
