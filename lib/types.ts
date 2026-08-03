@@ -101,6 +101,8 @@ export type Debtor = {
   sale_id: string | null;
   name: string;
   amount: number;
+  /** Cuánto se ha abonado hasta ahora de este monto original (amount nunca se modifica). */
+  paid_amount: number;
   paid: boolean;
   created_at: string;
 };
