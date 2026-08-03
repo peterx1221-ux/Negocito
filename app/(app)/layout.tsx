@@ -1,6 +1,7 @@
 import BottomNav from "@/components/BottomNav";
 import Toaster from "@/components/Toaster";
 import SignOutButton from "@/components/SignOutButton";
+import NotificationsBell from "@/components/NotificationsBell";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +11,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <h1>Cuaderno</h1>
           <div className="sub">Tu negocio</div>
         </div>
-        <SignOutButton />
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <NotificationsBell />
+          <SignOutButton />
+        </div>
       </div>
 
       <div className="screen">{children}</div>
