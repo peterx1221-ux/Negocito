@@ -10,6 +10,7 @@ type SaleRow = {
   qty: number;
   unit_price: number;
   profit: number;
+  paid: boolean;
   buyer_name: string | null;
   date: string;
 };
@@ -34,7 +35,7 @@ export default async function EstadisticasPage() {
 
   const [{ data: products }, { data: sales }, { data: purchases }] = await Promise.all([
     supabase.from("products").select("*"),
-    supabase.from("sales").select("product_id, product_name, qty, unit_price, profit, buyer_name, date"),
+    supabase.from("sales").select("product_id, product_name, qty, unit_price, profit, paid, buyer_name, date"),
     supabase.from("purchases").select("amount, date"),
   ]);
 
@@ -46,7 +47,8 @@ export default async function EstadisticasPage() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const isThisMonth = (d: string) => new Date(d) >= monthStart;
 
-  const gananciaMes = saleList.filter((s) => isThisMonth(s.date)).reduce((a, s) => a + (Number(s.profit) || 0), 0);
+  // Igual que en Resumen: solo cuenta como ganancia lo que ya se cobró.
+  const gananciaMes = saleList.filter((s) => isThisMonth(s.date) && s.paid).reduce((a, s) => a + (Number(s.profit) || 0), 0);
   const gastosMes = purchaseList.filter((p) => isThisMonth(p.date)).reduce((a, p) => a + (Number(p.amount) || 0), 0);
 
   // Top vendidos (por cantidad, histórico)
