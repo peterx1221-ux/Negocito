@@ -72,6 +72,75 @@ body {
   cursor: pointer;
 }
 
+.bell-btn {
+  position: relative;
+  background: none;
+  border: none;
+  font-size: 19px;
+  line-height: 1;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.bell-badge {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  background: var(--rust);
+  color: #fff;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+}
+.bell-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 30;
+}
+.bell-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 10px;
+  width: 280px;
+  max-width: 78vw;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  z-index: 31;
+  padding: 12px;
+}
+.bell-panel-title {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.bell-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 9px 4px;
+  border-bottom: 1px dashed var(--paper-line);
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.bell-item:last-child {
+  border-bottom: none;
+}
+
 .screen {
   flex: 1;
   padding: 18px 18px 100px 18px;
