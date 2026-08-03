@@ -10,7 +10,7 @@ export default async function ResumenPage() {
 
   const [{ data: products }, { data: sales }, { data: purchases }, { data: debtors }] = await Promise.all([
     supabase.from("products").select("*").order("name"),
-    supabase.from("sales").select("profit"),
+    supabase.from("sales").select("profit, paid"),
     supabase.from("purchases").select("amount"),
     supabase.from("debtors").select("*").eq("paid", false).order("created_at", { ascending: false }),
   ]);
@@ -27,9 +27,12 @@ export default async function ResumenPage() {
     });
   }
 
-  const gananciaVentas = (sales ?? []).reduce((a, s) => a + (Number(s.profit) || 0), 0);
+  // Solo cuenta como ganancia lo que ya se cobró — las ventas al fiado se suman
+  // recién cuando se pagan (total o abono a abono), no al momento de venderlas.
+  const gananciaVentas = (sales ?? []).filter((s) => s.paid).reduce((a, s) => a + (Number(s.profit) || 0), 0);
   const gastos = (purchases ?? []).reduce((a, p) => a + (Number(p.amount) || 0), 0);
   const inventarioValor = productList.reduce((a, p) => a + p.cost * p.stock, 0);
+  const deudaTotal = debtorList.reduce((a, d) => a + Math.max(0, d.amount - d.paid_amount), 0);
 
   const bajoStock = productList.filter((p) => p.stock <= 2).slice(0, 2);
   const deudoresAlerta = debtorList.slice(0, 2);
@@ -49,9 +52,15 @@ export default async function ResumenPage() {
           <span className="label">Inventario valorizado</span>
           <span className="num">{money(inventarioValor)}</span>
         </div>
+        {deudaTotal > 0 && (
+          <div className="row">
+            <span className="label">Deuda pendiente de cobro</span>
+            <span className="num num-pending">{money(deudaTotal)}</span>
+          </div>
+        )}
         <div className="row">
           <span className="label">Saldo</span>
-          <span className="num total">{money(gananciaVentas)}</span>
+          <span className="num total">{money(gananciaVentas - gastos)}</span>
         </div>
       </div>
 
