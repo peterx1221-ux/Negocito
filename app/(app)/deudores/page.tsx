@@ -24,7 +24,7 @@ type DebtorWithSale = Debtor & {
 };
 
 function remaining(d: Debtor): number {
-  return Math.max(0, d.amount - d.paid_amount);
+  return Math.max(0, Number(d.amount) - Number(d.paid_amount));
 }
 
 export default function DeudoresPage() {
@@ -101,12 +101,23 @@ export default function DeudoresPage() {
     const amount = parseFloat(abonoValue);
     if (!amount || amount <= 0) return;
 
-    const nuevoPagado = Math.min(d.paid_amount + amount, d.amount);
-    const quedaPagado = nuevoPagado >= d.amount;
+    const amountOwed = Number(d.amount);
+    const alreadyPaid = Number(d.paid_amount);
+    const nuevoPagado = Math.min(alreadyPaid + amount, amountOwed);
+    const quedaPagado = nuevoPagado >= amountOwed;
 
-    const { error } = await supabase.from("debtors").update({ paid_amount: nuevoPagado, paid: quedaPagado }).eq("id", d.id);
+    const { data, error } = await supabase
+      .from("debtors")
+      .update({ paid_amount: nuevoPagado, paid: quedaPagado })
+      .eq("id", d.id)
+      .select();
+
     if (error) {
       showToast(`No se pudo guardar el abono: ${error.message}`);
+      return;
+    }
+    if (!data || data.length === 0) {
+      showToast(`No se encontró la deuda de ${d.name} para actualizarla (puede que ya no exista esa fila)`);
       return;
     }
 
@@ -128,17 +139,31 @@ export default function DeudoresPage() {
   }
 
   async function marcarPagado(d: DebtorWithSale) {
-    const { error } = await supabase.from("debtors").update({ paid: true, paid_amount: d.amount }).eq("id", d.id);
+    const { data, error } = await supabase
+      .from("debtors")
+      .update({ paid: true, paid_amount: Number(d.amount) })
+      .eq("id", d.id)
+      .select();
+
     if (error) {
       showToast(`No se pudo marcar como pagado: ${error.message}`);
       return;
     }
+    if (!data || data.length === 0) {
+      showToast(`No se encontró la deuda de ${d.name} para marcarla (id ${d.id.slice(0, 8)}…) — revisa si ya no existe esa fila`);
+      return;
+    }
+    if (data[0].paid !== true) {
+      showToast(`Supabase respondió sin error, pero "paid" quedó en ${JSON.stringify(data[0].paid)} — no en true`);
+      return;
+    }
+
     if (d.sale_id) {
       const { error: saleError } = await supabase.from("sales").update({ paid: true }).eq("id", d.sale_id);
       if (saleError) showToast(`Deuda marcada como pagada, pero la venta no se actualizó: ${saleError.message}`);
     }
     setDebtors((prev) => prev.filter((x) => x.id !== d.id));
-    showToast(`Marcado como pagado: ${d.name}`);
+    showToast(`Marcado como pagado: ${d.name} ✓ (confirmado en la base de datos)`);
     router.refresh();
   }
 
@@ -161,8 +186,8 @@ export default function DeudoresPage() {
       const deudaLinea = remaining(d);
       if (deudaLinea <= 0) continue;
       const pago = Math.min(deudaLinea, restante);
-      const nuevoPagado = d.paid_amount + pago;
-      updates.push({ id: d.id, sale_id: d.sale_id, paid_amount: nuevoPagado, paid: nuevoPagado >= d.amount });
+      const nuevoPagado = Number(d.paid_amount) + pago;
+      updates.push({ id: d.id, sale_id: d.sale_id, paid_amount: nuevoPagado, paid: nuevoPagado >= Number(d.amount) });
       restante -= pago;
     }
 
@@ -170,8 +195,12 @@ export default function DeudoresPage() {
     const exitosas: typeof updates = [];
 
     for (const u of updates) {
-      const { error } = await supabase.from("debtors").update({ paid_amount: u.paid_amount, paid: u.paid }).eq("id", u.id);
-      if (error) {
+      const { data, error } = await supabase
+        .from("debtors")
+        .update({ paid_amount: u.paid_amount, paid: u.paid })
+        .eq("id", u.id)
+        .select();
+      if (error || !data || data.length === 0) {
         fallidas.push(u.id);
         continue;
       }
