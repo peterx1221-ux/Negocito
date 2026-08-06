@@ -104,9 +104,15 @@ export default function DeudoresPage() {
     const nuevoPagado = Math.min(d.paid_amount + amount, d.amount);
     const quedaPagado = nuevoPagado >= d.amount;
 
-    await supabase.from("debtors").update({ paid_amount: nuevoPagado, paid: quedaPagado }).eq("id", d.id);
+    const { error } = await supabase.from("debtors").update({ paid_amount: nuevoPagado, paid: quedaPagado }).eq("id", d.id);
+    if (error) {
+      showToast(`No se pudo guardar el abono: ${error.message}`);
+      return;
+    }
+
     if (quedaPagado && d.sale_id) {
-      await supabase.from("sales").update({ paid: true }).eq("id", d.sale_id);
+      const { error: saleError } = await supabase.from("sales").update({ paid: true }).eq("id", d.sale_id);
+      if (saleError) showToast(`Abono guardado, pero la venta no se actualizó: ${saleError.message}`);
     }
 
     if (quedaPagado) {
@@ -122,9 +128,14 @@ export default function DeudoresPage() {
   }
 
   async function marcarPagado(d: DebtorWithSale) {
-    await supabase.from("debtors").update({ paid: true, paid_amount: d.amount }).eq("id", d.id);
+    const { error } = await supabase.from("debtors").update({ paid: true, paid_amount: d.amount }).eq("id", d.id);
+    if (error) {
+      showToast(`No se pudo marcar como pagado: ${error.message}`);
+      return;
+    }
     if (d.sale_id) {
-      await supabase.from("sales").update({ paid: true }).eq("id", d.sale_id);
+      const { error: saleError } = await supabase.from("sales").update({ paid: true }).eq("id", d.sale_id);
+      if (saleError) showToast(`Deuda marcada como pagada, pero la venta no se actualizó: ${saleError.message}`);
     }
     setDebtors((prev) => prev.filter((x) => x.id !== d.id));
     showToast(`Marcado como pagado: ${d.name}`);
@@ -155,22 +166,34 @@ export default function DeudoresPage() {
       restante -= pago;
     }
 
+    const fallidas: string[] = [];
+    const exitosas: typeof updates = [];
+
     for (const u of updates) {
-      await supabase.from("debtors").update({ paid_amount: u.paid_amount, paid: u.paid }).eq("id", u.id);
+      const { error } = await supabase.from("debtors").update({ paid_amount: u.paid_amount, paid: u.paid }).eq("id", u.id);
+      if (error) {
+        fallidas.push(u.id);
+        continue;
+      }
+      exitosas.push(u);
       if (u.paid && u.sale_id) {
         await supabase.from("sales").update({ paid: true }).eq("id", u.sale_id);
       }
     }
 
+    if (fallidas.length > 0) {
+      showToast(`Ojo: ${fallidas.length} de ${updates.length} líneas no se pudieron guardar — revisa los permisos de la tabla "debtors"`);
+    }
+
     setDebtors((prev) => {
       const mapped = prev.map((x) => {
-        const u = updates.find((up) => up.id === x.id);
+        const u = exitosas.find((up) => up.id === x.id);
         return u ? { ...x, paid_amount: u.paid_amount, paid: u.paid } : x;
       });
       return mapped.filter((x) => !x.paid);
     });
 
-    const completas = updates.filter((u) => u.paid).length;
+    const completas = exitosas.filter((u) => u.paid).length;
     if (restante > 0) {
       showToast(`Abono de ${money(amount)} aplicado — sobraron ${money(restante)}, ya no tenía más deuda que cubrir`);
     } else if (completas > 0) {
