@@ -52,7 +52,12 @@ export default function DeudoresPage() {
     const salesById: Record<string, { product_name: string; qty: number; unit_price: number }> = {};
     if (saleIds.length > 0) {
       const { data: linkedSales } = await supabase.from("sales").select("id, product_name, qty, unit_price").in("id", saleIds);
-      for (const s of linkedSales ?? []) salesById[s.id] = s;
+      // Ojo: guardamos SOLO estos 3 campos (sin el "id" de la venta), porque si se
+      // cuela el id de la venta aquí, al mezclarlo más abajo pisa el id real del
+      // deudor — y las actualizaciones (abonar, pagar todo) apuntan a una fila que no existe.
+      for (const s of linkedSales ?? []) {
+        salesById[s.id] = { product_name: s.product_name, qty: s.qty, unit_price: s.unit_price };
+      }
     }
 
     const enriched: DebtorWithSale[] = debtorList.map((d) => ({
